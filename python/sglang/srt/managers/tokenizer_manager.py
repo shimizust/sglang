@@ -204,6 +204,7 @@ class TokenizerManager:
         request: Optional[fastapi.Request] = None,
     ):
         created_time = time.time()
+        print("###### GOT HERE! #########")
 
         self.auto_create_handle_loop()
 
