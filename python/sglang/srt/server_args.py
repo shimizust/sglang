@@ -142,6 +142,7 @@ class ServerArgs:
     disable_custom_all_reduce: bool = False
     disable_mla: bool = False
     disable_overlap_schedule: bool = False
+    enable_star_attention: bool = False
     enable_mixed_chunk: bool = False
     enable_dp_attention: bool = False
     enable_ep_moe: bool = False

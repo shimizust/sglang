@@ -275,6 +275,7 @@ class ModelRunner:
             model_config=self.model_config,
             load_config=self.load_config,
             device_config=DeviceConfig(self.device),
+            server_args=self.server_args,
         )
 
         # Parse other args

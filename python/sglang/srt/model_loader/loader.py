@@ -419,7 +419,7 @@ class ShardedStateLoader(BaseModelLoader):
     only needs to read its own shard rather than the entire checkpoint. See
     `examples/save_sharded_state.py` for creating a sharded checkpoint.
     """
-
+    # TODO: Where is the pattern set? Need to modify this?git 
     DEFAULT_PATTERN = "model-rank-{rank}-part-{part}.safetensors"
 
     def __init__(self, load_config: LoadConfig):
@@ -494,6 +494,7 @@ class ShardedStateLoader(BaseModelLoader):
         *,
         model_config: ModelConfig,
         device_config: DeviceConfig,
+        server_args: ServerArgs,
     ) -> nn.Module:
         from safetensors.torch import safe_open
         from vllm.distributed import get_tensor_model_parallel_rank
@@ -509,11 +510,18 @@ class ShardedStateLoader(BaseModelLoader):
                     quant_method = getattr(module, "quant_method", None)
                     if quant_method is not None:
                         quant_method.process_weights_after_loading(module)
-            rank = get_tensor_model_parallel_rank()
-            pattern = os.path.join(
-                local_model_path,
-                self.pattern.format(rank=rank, part="*"),
-            )
+
+            if server_args.enable_star_attention:
+                # Should check if tp_size > 1 ? or already guaranteed
+                # Load the full model instead of sharded checkpoints
+                pattern = os.path.join(local_model_path, self.pattern.format(part="*"))
+            else:
+                rank = get_tensor_model_parallel_rank()
+                pattern = os.path.join(
+                    local_model_path,
+                    self.pattern.format(rank=rank, part="*"),
+                )
+
             filepaths = glob.glob(pattern)
             if not filepaths:
                 # TODO: support un-sharded checkpoints too

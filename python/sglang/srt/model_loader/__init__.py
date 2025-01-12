@@ -5,6 +5,7 @@ from torch import nn
 from sglang.srt.configs.device_config import DeviceConfig
 from sglang.srt.configs.load_config import LoadConfig
 from sglang.srt.configs.model_config import ModelConfig
+from sglang.srt.server_args import ServerArgs
 from sglang.srt.model_loader.loader import BaseModelLoader, get_model_loader
 from sglang.srt.model_loader.utils import (
     get_architecture_class_name,
@@ -17,11 +18,13 @@ def get_model(
     model_config: ModelConfig,
     load_config: LoadConfig,
     device_config: DeviceConfig,
+    server_args: ServerArgs,
 ) -> nn.Module:
     loader = get_model_loader(load_config)
     return loader.load_model(
         model_config=model_config,
         device_config=device_config,
+        server_args=server_args,
     )
 
 

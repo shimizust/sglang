@@ -8,7 +8,6 @@ r9c8 model: /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-L
 
 SGLANG_TORCH_PROFILER_DIR=/shared/user/repos/sglang/python/sglang/profile_traces python -m sglang.bench_offline_throughput_2 --model-path /shared/public/elr-models/meta-llama/Meta-Llama-3.1-8B-Instruct/07eb05b21d191a58c577b4a45982fe0c049d0693/ --profile
 
-
 python -m sglang.bench_offline_throughput_2 --model-path /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-Llama-3.1-8B-Instruct-r9c8-mini-baseline-SFT/f6f23394a78414c9f827/SFT-saved-model-HF --tp 2 --disable-cuda-graph
 """
 import argparse
