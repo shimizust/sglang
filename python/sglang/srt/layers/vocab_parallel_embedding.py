@@ -232,7 +232,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         else:
             tp_rank = 0
             self.tp_size = 1
-
+        self.tp_rank = tp_rank
         self.num_embeddings = num_embeddings
         self.padding_size = padding_size
         self.org_vocab_size = org_num_embeddings or num_embeddings

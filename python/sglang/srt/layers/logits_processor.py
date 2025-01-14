@@ -112,7 +112,7 @@ class LogitsProcessor(nn.Module):
         self.config = config
         self.logit_scale = logit_scale
         self.do_tensor_parallel_all_gather = (
-            not skip_all_gather and get_tensor_model_parallel_world_size() > 1
+            not skip_all_gather and get_tensor_model_parallel_world_size() > 1 and not config.enable_star_attention
         )
         self.final_logit_softcapping = getattr(
             self.config, "final_logit_softcapping", None

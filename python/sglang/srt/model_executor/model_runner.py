@@ -483,7 +483,7 @@ class ModelRunner:
 
     def profile_max_num_token(self, total_gpu_memory: int):
         available_gpu_memory = get_available_gpu_memory(
-            self.device, self.gpu_id, distributed=self.tp_size > 1
+            self.device, self.gpu_id, distributed=(self.tp_size > 1 and not self.server_args.enable_star_attention)
         )
         if (
             self.model_config.attention_arch == AttentionArch.MLA
@@ -495,8 +495,9 @@ class ModelRunner:
                 * torch._utils._element_size(self.kv_cache_dtype)
             )
         else:
+            tp_size = 1 if self.server_args.enable_star_attention else self.tp_size
             cell_size = (
-                self.model_config.get_num_kv_heads(self.tp_size)
+                self.model_config.get_num_kv_heads(tp_size)
                 * self.model_config.head_dim
                 * self.model_config.num_hidden_layers
                 * 2
@@ -569,6 +570,7 @@ class ModelRunner:
             device=self.device,
             use_records=False,
         )
+        tp_size_for_token_to_kv_pool = 1 if self.server_args.enable_star_attention else self.tp_size
         if (
             self.model_config.attention_arch == AttentionArch.MLA
             and not self.server_args.disable_mla
@@ -585,7 +587,7 @@ class ModelRunner:
             self.token_to_kv_pool = DoubleSparseTokenToKVPool(
                 self.max_total_num_tokens,
                 dtype=self.kv_cache_dtype,
-                head_num=self.model_config.get_num_kv_heads(self.tp_size),
+                head_num=self.model_config.get_num_kv_heads(tp_size_for_token_to_kv_pool),
                 head_dim=self.model_config.head_dim,
                 layer_num=self.model_config.num_hidden_layers,
                 device=self.device,
@@ -595,7 +597,7 @@ class ModelRunner:
             self.token_to_kv_pool = MHATokenToKVPool(
                 self.max_total_num_tokens,
                 dtype=self.kv_cache_dtype,
-                head_num=self.model_config.get_num_kv_heads(self.tp_size),
+                head_num=self.model_config.get_num_kv_heads(tp_size_for_token_to_kv_pool),
                 head_dim=self.model_config.head_dim,
                 layer_num=self.model_config.num_hidden_layers,
                 device=self.device,
