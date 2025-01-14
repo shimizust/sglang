@@ -401,9 +401,10 @@ def safetensors_weights_iterator(
     for st_file in tqdm(
         hf_weights_files,
         desc="Loading safetensors checkpoint shards",
-        disable=not enable_tqdm,
+        disable=False, #not enable_tqdm,
         bar_format=_BAR_FORMAT,
     ):
+        
         with safe_open(st_file, framework="pt") as f:
             for name in f.keys():  # noqa: SIM118
                 param = f.get_tensor(name)

@@ -127,6 +127,7 @@ class TokenizerManager:
             is_embedding=server_args.is_embedding,
             dtype=server_args.dtype,
             quantization=server_args.quantization,
+            enable_star_attention=server_args.enable_star_attention,
         )
 
         self.is_generation = self.model_config.is_generation

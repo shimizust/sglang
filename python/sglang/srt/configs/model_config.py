@@ -43,13 +43,21 @@ class ModelConfig:
         is_embedding: Optional[bool] = None,
         dtype: str = "auto",
         quantization: Optional[str] = None,
+        enable_star_attention: Optional[bool] = False,
     ) -> None:
         self.model_path = model_path
         self.revision = revision
         self.quantization = quantization
+        self.enable_star_attention = enable_star_attention
 
         # Parse args
         self.model_override_args = json.loads(model_override_args)
+
+        # Add the enable_star_attention flag into the HF model config so it can
+        # be accessed in the modeling code
+        print(f"####### Model Config enable_star_attention: {enable_star_attention}")
+        self.model_override_args["enable_star_attention"] = enable_star_attention
+
         self.hf_config = get_config(
             model_path,
             trust_remote_code=trust_remote_code,

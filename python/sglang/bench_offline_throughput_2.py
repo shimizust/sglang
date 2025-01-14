@@ -8,7 +8,10 @@ r9c8 model: /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-L
 
 SGLANG_TORCH_PROFILER_DIR=/shared/user/repos/sglang/python/sglang/profile_traces python -m sglang.bench_offline_throughput_2 --model-path /shared/public/elr-models/meta-llama/Meta-Llama-3.1-8B-Instruct/07eb05b21d191a58c577b4a45982fe0c049d0693/ --profile
 
-python -m sglang.bench_offline_throughput_2 --model-path /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-Llama-3.1-8B-Instruct-r9c8-mini-baseline-SFT/f6f23394a78414c9f827/SFT-saved-model-HF --tp 2 --disable-cuda-graph
+python -m sglang.bench_offline_throughput_2 --model-path /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-Llama-3.1-8B-Instruct-r9c8-mini-baseline-SFT/f6f23394a78414c9f827/SFT-saved-model-HF --dp-size 2 --disable-cuda-graph
+
+python -m sglang.bench_offline_throughput_2 --model-path /shared/public/elr-models/meta-llama/Meta-Llama-3.1-70B-Instruct/846357c7ee5e3f50575fd4294edb3d898c8ea100 --tp 2 --disable-cuda-graph
+
 """
 import argparse
 import dataclasses
@@ -32,13 +35,13 @@ from sglang.srt.server import Engine, Runtime
 @dataclasses.dataclass
 class BenchArgs:
     run_name: str = "default"
-    num_requests: int = 10
-    prompts_per_member: int = 10
+    num_requests: int = 5
+    prompts_per_member: int = 4
     output_len: int = 1
     result_filename: str = "result.jsonl"
     dataset_path: str = "/shared/public/sharing/ella/data/inference/jymbii_papply/v2_0_4/llama_benchmark_prompts_icl_8192.json"
     backend: str = "engine"
-    skip_warmup: bool = False
+    skip_warmup: bool = True
     result_filename: str = ""
     profile: bool = False
     seed: int = 1

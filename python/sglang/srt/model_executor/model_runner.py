@@ -59,6 +59,7 @@ from sglang.srt.utils import (
     monkey_patch_vllm_p2p_access_check,
     set_cpu_offload_max_bytes,
 )
+from sglang.srt.model_loader.loader import print_model_param_summary
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,9 @@ class ModelRunner:
             self.torch_tp_applied = True
         else:
             self.torch_tp_applied = False
+
+        # Confirm model loading
+        # print_model_param_summary(self.model)
 
         # Init memory pool and attention backends
         if server_args.lora_paths is not None:

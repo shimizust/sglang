@@ -29,6 +29,7 @@ from vllm.distributed import (
 from sglang.srt.configs.device_config import DeviceConfig
 from sglang.srt.configs.load_config import LoadConfig, LoadFormat
 from sglang.srt.configs.model_config import ModelConfig
+from sglang.srt.server_args import ServerArgs
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.model_loader.utils import (
     get_model_architecture,
@@ -140,6 +141,20 @@ def _initialize_model(
         quant_config=quant_config,
     )
 
+
+def print_model_param_summary(model):
+    device_to_numel = {}
+    for name, param in model.named_parameters():
+        dev = param.device
+        shape = list(param.shape)
+        numel = param.numel()
+        # Accumulate total for each device
+        device_to_numel[dev] = device_to_numel.get(dev, 0) + numel
+        print(f"Param: {name}, shape={shape}, device={dev}, numel={numel}")
+
+    # Print summary
+    for dev, total in device_to_numel.items():
+        print(f"Total parameters on {dev}: {total:,}")
 
 class BaseModelLoader(ABC):
     """Base class for model loaders."""
@@ -313,6 +328,8 @@ class DefaultModelLoader(BaseModelLoader):
                 hf_weights_files,
             )
         elif use_safetensors:
+            print(f"******* DefaultModelLoader _get_weights_tensor() for rank: {get_tensor_model_parallel_rank()}")
+            print(hf_weights_files)
             weights_iterator = safetensors_weights_iterator(hf_weights_files)
         else:
             weights_iterator = pt_weights_iterator(hf_weights_files)
@@ -350,7 +367,9 @@ class DefaultModelLoader(BaseModelLoader):
         *,
         model_config: ModelConfig,
         device_config: DeviceConfig,
+        server_args: ServerArgs,
     ) -> nn.Module:
+        print(f"******* DefaultModelLoader load_model() for {get_tensor_model_parallel_rank()}")
         target_device = torch.device(device_config.device)
         with set_default_torch_dtype(model_config.dtype):
             with target_device:
@@ -419,7 +438,7 @@ class ShardedStateLoader(BaseModelLoader):
     only needs to read its own shard rather than the entire checkpoint. See
     `examples/save_sharded_state.py` for creating a sharded checkpoint.
     """
-    # TODO: Where is the pattern set? Need to modify this?git 
+    # TODO: Where is the pattern set? Need to modify this?
     DEFAULT_PATTERN = "model-rank-{rank}-part-{part}.safetensors"
 
     def __init__(self, load_config: LoadConfig):
@@ -1139,7 +1158,7 @@ class GGUFModelLoader(BaseModelLoader):
 
 def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
     """Get a model loader based on the load format."""
-
+    print(f"********* Loader config: {load_config.load_format}")
     if isinstance(load_config.load_format, type):
         return load_config.load_format(load_config)
 

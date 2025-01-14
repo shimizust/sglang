@@ -275,6 +275,7 @@ class LlamaModel(nn.Module):
         )
 
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        print(f"LlamaModel Star attention flag: {config.enable_star_attention}")
 
     def forward(
         self,

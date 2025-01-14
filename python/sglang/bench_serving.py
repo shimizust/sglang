@@ -9,6 +9,8 @@ python3 -m sglang.bench_serving --backend sglang --num-prompt 10
 
 python3 -m sglang.bench_serving --backend sglang --dataset-name random --num-prompts 3000 --random-input 1024 --random-output 1024 --random-range-ratio 0.5
 python3 -m sglang.bench_serving --backend sglang --dataset-name random --request-rate-range 1,2,4,8,16,32 --random-input 4096 --random-output 1024 --random-range-ratio 0.125 --multi
+
+python -m sglang.bench_serving --backend sglang --dataset-path /shared/public/data/sharegpt/ShareGPT_V3_unfiltered_cleaned_split.json --num-prompts 100 --random-input 1024 --random-output 1024 --random-range-ratio 0.5 --model /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-Llama-3.1-8B-Instruct-r9c8-mini-baseline-SFT/f6f23394a78414c9f827/SFT-saved-model-HF
 """
 
 import argparse
