@@ -438,7 +438,6 @@ class ShardedStateLoader(BaseModelLoader):
     only needs to read its own shard rather than the entire checkpoint. See
     `examples/save_sharded_state.py` for creating a sharded checkpoint.
     """
-    # TODO: Where is the pattern set? Need to modify this?
     DEFAULT_PATTERN = "model-rank-{rank}-part-{part}.safetensors"
 
     def __init__(self, load_config: LoadConfig):
@@ -530,16 +529,11 @@ class ShardedStateLoader(BaseModelLoader):
                     if quant_method is not None:
                         quant_method.process_weights_after_loading(module)
 
-            if server_args.enable_star_attention:
-                # Should check if tp_size > 1 ? or already guaranteed
-                # Load the full model instead of sharded checkpoints
-                pattern = os.path.join(local_model_path, self.pattern.format(part="*"))
-            else:
-                rank = get_tensor_model_parallel_rank()
-                pattern = os.path.join(
-                    local_model_path,
-                    self.pattern.format(rank=rank, part="*"),
-                )
+            rank = get_tensor_model_parallel_rank()
+            pattern = os.path.join(
+                local_model_path,
+                self.pattern.format(rank=rank, part="*"),
+            )
 
             filepaths = glob.glob(pattern)
             if not filepaths:
@@ -1158,7 +1152,6 @@ class GGUFModelLoader(BaseModelLoader):
 
 def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
     """Get a model loader based on the load format."""
-    print(f"********* Loader config: {load_config.load_format}")
     if isinstance(load_config.load_format, type):
         return load_config.load_format(load_config)
 

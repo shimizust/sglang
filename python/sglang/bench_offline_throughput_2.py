@@ -10,7 +10,8 @@ SGLANG_TORCH_PROFILER_DIR=/shared/user/repos/sglang/python/sglang/profile_traces
 
 python -m sglang.bench_offline_throughput_2 --model-path /shared/public/sharing/fait360brew/dev/qsong/360brew-pipeline/Meta-Llama-3.1-8B-Instruct-r9c8-mini-baseline-SFT/f6f23394a78414c9f827/SFT-saved-model-HF --dp-size 2 --disable-cuda-graph
 
-python -m sglang.bench_offline_throughput_2 --model-path /shared/public/elr-models/meta-llama/Meta-Llama-3.1-70B-Instruct/846357c7ee5e3f50575fd4294edb3d898c8ea100 --tp 2 --disable-cuda-graph
+To test out star attention parittioning context across 2 GPUs on A100 (require disable-cuda-graph):
+python -m sglang.bench_offline_throughput_2 --model-path /shared/public/elr-models/meta-llama/Meta-Llama-3.1-70B-Instruct/846357c7ee5e3f50575fd4294edb3d898c8ea100 --disable-cuda-graph --enable-star-attention --tp 2
 
 """
 import argparse

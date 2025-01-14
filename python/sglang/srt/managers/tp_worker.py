@@ -160,6 +160,8 @@ class TpModelWorker:
         skip_sample: bool = False,
     ):
         forward_batch = ForwardBatch.init_new(model_worker_batch, self.model_runner)
+
+        print(f"******* TpModelWorker rank {self.tp_rank}: {forward_batch}")
         logits_output = self.model_runner.forward(forward_batch)
         if launch_done:
             launch_done.set()

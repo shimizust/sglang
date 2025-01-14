@@ -36,7 +36,6 @@ class RadixAttention(nn.Module):
         is_cross_attention: bool = False,
     ):
         super().__init__()
-        # print(*args, **kwargs)
         self.tp_q_head_num = num_heads
         self.tp_k_head_num = num_kv_heads
         self.tp_v_head_num = num_kv_heads

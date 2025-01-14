@@ -136,13 +136,11 @@ def tensor_parallel(
     # This is a helper function to be used with `model.apply` to recursively
     # parallelize a model.
     def tplize(mod: torch.nn.Module) -> None:
-        print("******** Calling tensor_parallel()")
         tp_plan = getattr(mod, "_tp_plan", None)
         if tp_plan is None:
             return
         for child_name, tp_style in tp_plan.items():
             submod = mod.get_submodule(child_name)
-            print(f"********* tp_style for {child_name}: {tp_style}")
             if tp_style == "Colwise":
                 parallelize_module(submod, device_mesh, ColwiseParallel())
             elif tp_style == "Rowwise":

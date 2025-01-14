@@ -188,7 +188,6 @@ class MHATokenToKVPool(BaseTokenToKVPool):
         device: str,
     ):
         super().__init__(size, dtype, device)
-        print(f"*********** head_num: {head_num}, head_dim: {head_dim}, layer_num: {layer_num}")
         self.head_num = head_num
         self.head_dim = head_dim
         self.layer_num = layer_num
