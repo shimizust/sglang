@@ -184,7 +184,7 @@ class ModelRunner:
             self.torch_tp_applied = False
 
         # Confirm model loading
-        # print_model_param_summary(self.model)
+        print_model_param_summary(self.model)
 
         # Init memory pool and attention backends
         if server_args.lora_paths is not None:

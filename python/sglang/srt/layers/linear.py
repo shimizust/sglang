@@ -498,12 +498,13 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         tp_rank: Optional[int] = None,
         tp_size: Optional[int] = None,
         use_presharded_weights: bool = False,
+        enable_star_attention: bool = False,
     ):
         self.output_sizes = output_sizes
         if tp_rank is None:
-            tp_rank = get_tensor_model_parallel_rank()
+            tp_rank = 0 if enable_star_attention else get_tensor_model_parallel_rank()
         if tp_size is None:
-            tp_size = get_tensor_model_parallel_world_size()
+            tp_size = 1 if enable_star_attention else get_tensor_model_parallel_world_size()
         self.tp_rank, self.tp_size = tp_rank, tp_size
         assert all(output_size % tp_size == 0 for output_size in output_sizes)
         self.use_presharded_weights = use_presharded_weights
@@ -765,6 +766,7 @@ class QKVParallelLinear(ColumnParallelLinear):
         prefix: str = "",
         tp_rank: Optional[int] = None,
         tp_size: Optional[int] = None,
+        enable_star_attention: bool = False,
     ):
         self.hidden_size = hidden_size
         self.head_size = head_size
@@ -773,10 +775,11 @@ class QKVParallelLinear(ColumnParallelLinear):
             total_num_kv_heads = total_num_heads
         self.total_num_kv_heads = total_num_kv_heads
         # Divide the weight matrix along the last dimension.
+
         if tp_rank is None:
-            tp_rank = get_tensor_model_parallel_rank()
+            tp_rank = 0 if enable_star_attention else get_tensor_model_parallel_rank()
         if tp_size is None:
-            tp_size = get_tensor_model_parallel_world_size()
+            tp_size = 1 if enable_star_attention else get_tensor_model_parallel_world_size()
         self.tp_rank, self.tp_size = tp_rank, tp_size
         self.num_heads = divide(self.total_num_heads, tp_size)
         if tp_size >= self.total_num_kv_heads:
@@ -1151,6 +1154,7 @@ class RowParallelLinear(LinearBase):
         tp_rank: Optional[int] = None,
         tp_size: Optional[int] = None,
         use_presharded_weights: bool = False,
+        enable_star_attention: bool = False,
     ):
         super().__init__(
             input_size, output_size, skip_bias_add, params_dtype, quant_config, prefix
@@ -1161,9 +1165,9 @@ class RowParallelLinear(LinearBase):
 
         # Divide the weight matrix along the last dimension.
         if tp_rank is None:
-            tp_rank = get_tensor_model_parallel_rank()
+            tp_rank = 0 if enable_star_attention else get_tensor_model_parallel_rank()
         if tp_size is None:
-            tp_size = get_tensor_model_parallel_world_size()
+            tp_size = 1 if enable_star_attention else get_tensor_model_parallel_world_size()
         self.tp_rank, self.tp_size = tp_rank, tp_size
         self.input_size_per_partition = divide(input_size, self.tp_size)
         assert self.quant_method is not None

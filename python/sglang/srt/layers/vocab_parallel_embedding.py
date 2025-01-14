@@ -220,12 +220,13 @@ class VocabParallelEmbedding(torch.nn.Module):
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = "",
         enable_tp: bool = True,
+        enable_star_attention: bool = False,
     ):
         super().__init__()
         self.quant_config = quant_config
 
         self.enable_tp = enable_tp
-        if self.enable_tp:
+        if self.enable_tp and not enable_star_attention:
             tp_rank = get_tensor_model_parallel_rank()
             self.tp_size = get_tensor_model_parallel_world_size()
         else:
@@ -514,6 +515,7 @@ class ParallelLMHead(VocabParallelEmbedding):
         padding_size: int = DEFAULT_VOCAB_PADDING_SIZE,
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = "",
+        enable_star_attention: bool = True,
     ):
         super().__init__(
             num_embeddings,
@@ -523,6 +525,7 @@ class ParallelLMHead(VocabParallelEmbedding):
             padding_size,
             quant_config,
             prefix,
+            enable_star_attention=enable_star_attention,
         )
         self.quant_config = quant_config
         if bias:

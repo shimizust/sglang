@@ -56,6 +56,7 @@ class LlamaMLP(nn.Module):
         hidden_act: str,
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = "",
+        enable_star_attention: bool = False
     ) -> None:
         super().__init__()
         self.gate_up_proj = MergedColumnParallelLinear(
@@ -64,6 +65,7 @@ class LlamaMLP(nn.Module):
             bias=False,
             quant_config=quant_config,
             prefix=f"{prefix}.gate_up_proj",
+            enable_star_attention=enable_star_attention,
         )
         self.down_proj = RowParallelLinear(
             intermediate_size,
@@ -71,6 +73,7 @@ class LlamaMLP(nn.Module):
             bias=False,
             quant_config=quant_config,
             prefix=f"{prefix}.down_proj",
+            enable_star_attention=enable_star_attention,
         )
         if hidden_act != "silu":
             raise ValueError(
@@ -104,7 +107,13 @@ class LlamaAttention(nn.Module):
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
-        tp_size = get_tensor_model_parallel_world_size()
+        
+        enable_star_attention = config.enable_star_attention
+        if enable_star_attention:
+            tp_size = 1
+        else:
+            tp_size = get_tensor_model_parallel_world_size()
+
         self.total_num_heads = num_heads
         assert self.total_num_heads % tp_size == 0
         self.num_heads = self.total_num_heads // tp_size
@@ -136,6 +145,7 @@ class LlamaAttention(nn.Module):
             bias=bias,
             quant_config=quant_config,
             prefix=f"{prefix}.qkv_proj",
+            enable_star_attention=enable_star_attention,
         )
         self.o_proj = RowParallelLinear(
             self.total_num_heads * self.head_dim,
@@ -143,6 +153,7 @@ class LlamaAttention(nn.Module):
             bias=bias,
             quant_config=quant_config,
             prefix=f"{prefix}.o_proj",
+            enable_star_attention=enable_star_attention,
         )
 
         self.rotary_emb = get_rope(
@@ -200,6 +211,7 @@ class LlamaDecoderLayer(nn.Module):
         attention_bias = getattr(config, "attention_bias", False) or getattr(
             config, "bias", False
         )
+        enable_star_attention = config.enable_star_attention
         self.self_attn = LlamaAttention(
             config=config,
             hidden_size=self.hidden_size,
@@ -220,6 +232,7 @@ class LlamaDecoderLayer(nn.Module):
             hidden_act=config.hidden_act,
             quant_config=quant_config,
             prefix=f"{prefix}.mlp",
+            enable_star_attention=enable_star_attention,
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(
@@ -261,15 +274,18 @@ class LlamaModel(nn.Module):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        
+        enable_star_attention = self.config.enable_star_attention
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
             config.hidden_size,
             quant_config=quant_config,
+            enable_star_attention=enable_star_attention,
         )
         self.layers = make_layers(
             config.num_hidden_layers,
             lambda idx, prefix: LlamaDecoderLayer(
-                config=config, quant_config=quant_config, layer_id=idx, prefix=prefix
+                config=config, quant_config=quant_config, layer_id=idx, prefix=prefix,
             ),
             prefix="model.layers",
         )
@@ -339,7 +355,7 @@ class LlamaForCausalLM(nn.Module):
             self.lm_head = self.model.embed_tokens
         else:
             self.lm_head = ParallelLMHead(
-                config.vocab_size, config.hidden_size, quant_config=quant_config
+                config.vocab_size, config.hidden_size, quant_config=quant_config, enable_star_attention=self.config.enable_star_attention,
             )
         self.logits_processor = LogitsProcessor(config)
         self.pooler = Pooler(pooling_type=PoolingType.LAST, normalize=True)
