@@ -159,6 +159,7 @@ class RadixCache(BasePrefixCache):
             (req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices))),
             new_indices[len(req.prefix_indices) :],
         )
+        print(f"****** RadixCache, writing to req_to_token_pool at indices: {(req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices)))}, with value: {new_indices[len(req.prefix_indices) :]}")
 
         self.dec_lock_ref(req.last_node)
         self.inc_lock_ref(new_last_node)

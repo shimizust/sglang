@@ -46,7 +46,7 @@ from sglang.srt.mem_cache.memory_pool import (
     MLATokenToKVPool,
     ReqToTokenPool,
 )
-from sglang.srt.model_executor.forward_batch_info import ForwardBatch
+from sglang.srt.model_executor.forward_batch_info import ForwardBatch, StarAttentionPhase
 from sglang.srt.model_loader import get_model
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
@@ -688,13 +688,113 @@ class ModelRunner:
             forward_batch.input_ids, forward_batch.positions, forward_batch
         )
 
+    def find_boundary_between_context_query_for_apollo(self, input_ids, split_token_id=128006):
+        """
+        Finds the index of the second-to-last occurrence of split_token_id in each sequence of input_ids.
+
+        :param input_ids: A 2D PyTorch tensor where each row is a sequence of token IDs.
+        :param split_token_id: The token ID used to split the sequences. Using <|start_header_id|> token id (128006)
+        :return: A list of indices specifying the start of the query in input_ids
+        """
+        indices = []
+
+        for sequence in input_ids:
+            # Find all occurrences of split_token_id, looks like tensor([ind1, ind2, ...])
+            split_indices = (sequence == split_token_id).nonzero(as_tuple=True)[0]
+
+            # Check if there are at least two occurrences
+            if len(split_indices) >= 2:
+                # Get the second-to-last occurrence, which is the boundary of the (member prompt + member history) and (candidate item)
+                second_to_last_index = split_indices[-2].item()
+                indices.append(second_to_last_index)
+            else:
+                # If there are fewer than two occurrences, append None or a default value
+                indices.append(None)
+                print("******** Context/Query boundary couldn't be identified")
+
+        return indices
+
+    
+
     def forward_extend(self, forward_batch: ForwardBatch):
+        # In case of extend, we need to split the request input_ids into context and query
+        # followed by partioning the context into blocks
+
+        enable_star_attention = self.server_args.enable_star_attention
+        if enable_star_attention:
+            query_start_indices = self.find_boundary_between_context_query_for_apollo(forward_batch.input_ids)
+            
+            input_ids_context = []
+            input_ids_query = []
+            positions_context = []
+            positions_query = []
+
+            for sequence_input_ids, sequence_positions, split_index in zip(forward_batch.input_ids, forward_batch.positions, query_start_indices):
+                if split_index is not None and split_index < len(sequence_input_ids):
+                    sequence_input_ids_context = sequence_input_ids[:split_index]
+                    sequence_positions_context = sequence_positions[:split_index]
+
+                    # Include the split token in the query
+                    sequence_input_ids_query = sequence_input_ids[split_index:]
+                    sequence_positions_query = sequence_positions[split_index:]
+                else:
+                    # We shouldn't get here...
+                    print("********* ModelRunner.forward_extend(), unable to split input inpo context/query")
+                    sequence_input_ids_context = sequence_input_ids
+                    sequence_input_ids_query = torch.tensor([], dtype=sequence_input_ids.dtype)
+
+                    sequence_positions_context = sequence_positions
+                    sequence_positions_query = torch.tensor([], dtype=sequence_positions.dtype)
+            
+                input_ids_context.append(sequence_input_ids_context)
+                input_ids_query.append(sequence_input_ids_query)
+                positions_context.append(sequence_positions_context)
+                positions_query.append(sequence_positions_query)
+
+                # TODO: Do we need to pad these sequences?
+
+                
         self.attn_backend.init_forward_metadata(forward_batch)
         if self.is_generation:
             if forward_batch.input_embeds is None:
-                return self.model.forward(
-                    forward_batch.input_ids, forward_batch.positions, forward_batch
-                )
+                if enable_star_attention:
+                    context_blocks_input_ids = [] # TODO: Divide up into tp_size blocks
+                    context_blocks_positions = []
+                    
+                    anchor_block_input_ids = context_blocks_input_ids[0]
+                    anchor_block_positions = context_blocks_positions[0]    
+
+                    # Star Attention: Phase 1
+                    if self.tp_rank == 0:
+                        # First rank just gets the anchor block
+                        input_ids = anchor_block_input_ids
+                        positions = anchor_block_position
+                    else:
+                        # Other ranks get anchor block + one of the context blocks
+                        input_ids = anchor_block_input_ids + context_blocks_input_ids[self.tp_rank]
+                        positions = anchor_block_positions + context_blocks_positions[self.tp_rank]
+
+                    forward_batch.star_attention_phase = StarAttentionPhase.CONTEXT_ENCODING
+                    # TODO: Update rest of forward_batch properties
+                    self.model.forward(
+                        input_ids=input_ids,
+                        positions=positions,
+                        forward_batch=forward_batch
+                    )
+
+                    # Star Attention: Phase 2
+                    forward_batch.star_attention_phase = StarAttentionPhase.QUERY_DECODING
+                    # TODO: Update rest of forward_batch properties
+                    return self.model.forward(
+                        input_ids=input_ids_query,
+                        positions=postions_query,
+                        forward_batch=forward_batch,
+                    )
+
+                else:
+                    return self.model.forward(
+                        forward_batch.input_ids, forward_batch.positions, forward_batch
+                    )
             else:
                 return self.model.forward(
                     forward_batch.input_ids,
@@ -724,6 +824,8 @@ class ModelRunner:
         ):
             return self.cuda_graph_runner.replay(forward_batch)
 
+        print(f"******* ModelRunner forward(), forward_mode: {forward_batch.forward_mode}")
+        print(forward_batch)
         if forward_batch.forward_mode.is_decode():
             return self.forward_decode(forward_batch)
         elif forward_batch.forward_mode.is_extend():

@@ -109,6 +109,10 @@ class ForwardMode(IntEnum):
     def is_decode_or_idle(self):
         return self == ForwardMode.DECODE or self == ForwardMode.IDLE
 
+class StarAttentionPhase(IntEnum):
+    CONTEXT_ENCODING = auto()
+    QUERY_DECODING = auto()
+
 
 class CaptureHiddenMode(IntEnum):
     NULL = auto()
@@ -131,6 +135,8 @@ class ForwardBatch:
 
     # The forward mode
     forward_mode: ForwardMode
+    # The star attention phase
+    star_attention_phase: StarAttentionPhase
     # The batch size
     batch_size: int
     # The input ids

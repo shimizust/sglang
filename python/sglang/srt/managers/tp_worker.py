@@ -161,7 +161,6 @@ class TpModelWorker:
     ):
         forward_batch = ForwardBatch.init_new(model_worker_batch, self.model_runner)
 
-        print(f"******* TpModelWorker rank {self.tp_rank}: {forward_batch}")
         logits_output = self.model_runner.forward(forward_batch)
         if launch_done:
             launch_done.set()
@@ -171,6 +170,7 @@ class TpModelWorker:
         else:
             next_token_ids = self.model_runner.sample(logits_output, model_worker_batch)
 
+        print(f"****** TPMODELWORKER,  next_token_ids: {next_token_ids}")
         return logits_output, next_token_ids
 
     def forward_batch_embedding(self, model_worker_batch: ModelWorkerBatch):
