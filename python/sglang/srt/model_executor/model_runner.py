@@ -688,7 +688,7 @@ class ModelRunner:
             forward_batch.input_ids, forward_batch.positions, forward_batch
         )
 
-    def find_boundary_between_context_query_for_apollo(self, input_ids, split_token_id=128006):
+    def find_boundary_between_context_query_for_apollo(self, input_ids, split_token_id=128006) -> List[int]:
         """
         Finds the index of the second-to-last occurrence of split_token_id in each sequence of input_ids.
 
@@ -714,68 +714,130 @@ class ModelRunner:
 
         return indices
 
-    
+    def split_input_into_context_and_query(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        query_start_indices: List[int]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Splits the input_ids/positions into context and query input_ids/positions based on the provided
+        query_start_indices
+
+        :return A tuple of 4 tensors: input_ids_context, input_ids_query, positions_context, positions_query
+        """
+        input_ids_context = []
+        input_ids_query = []
+        positions_context = []
+        positions_query = []
+
+        for sequence_input_ids, sequence_positions, split_index in zip(forward_batch.input_ids, forward_batch.positions, query_start_indices):
+            if split_index is not None and split_index < len(sequence_input_ids):
+                sequence_input_ids_context = sequence_input_ids[:split_index]
+                sequence_positions_context = sequence_positions[:split_index]
+
+                # Include the split token in the query
+                sequence_input_ids_query = sequence_input_ids[split_index:]
+                sequence_positions_query = sequence_positions[split_index:]
+            else:
+                # We shouldn't get here...
+                print("********* ModelRunner.forward_extend(), unable to split input into context/query")
+                sequence_input_ids_context = sequence_input_ids
+                sequence_input_ids_query = torch.tensor([], dtype=sequence_input_ids.dtype)
+
+                sequence_positions_context = sequence_positions
+                sequence_positions_query = torch.tensor([], dtype=sequence_positions.dtype)
+        
+            input_ids_context.append(sequence_input_ids_context)
+            input_ids_query.append(sequence_input_ids_query)
+            positions_context.append(sequence_positions_context)
+            positions_query.append(sequence_positions_query)
+
+        return input_ids_context, input_ids_query, positions_context, positions_query
+
+
+    def divide_context_into_blocks(
+        self, 
+        context_input_ids: torch.Tensor, 
+        context_positions: torch.Tensor
+    ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+        """
+        Divide the context_input_ids and context_positions into tp_size roughly equal blocks across
+        the sequence length
+
+        Args:
+            context_input_ids (torch.Tensor): The input IDs to be divided, shape [N, seq_len].
+            context_positions (torch.Tensor): The positions corresponding to input IDs, shape [N, seq_len].
+
+        Returns:
+            Tuple[List[torch.Tensor], List[torch.Tensor]]: A tuple containing lists of tensors (each of length tp_size), 
+                                                        each representing a block for input IDs and positions.
+        """
+        tp_size = self.tp_size
+        
+        # Determine the number of sequences and sequence length.
+        seq_len = context_input_ids.size(1)
+
+        # Compute block size
+        block_size = seq_len // tp_size
+
+        # Divide the input into roughly equal blocks.
+        context_blocks_input_ids = []
+        context_blocks_positions = []
+
+        for i in range(tp_size):
+            # Compute start and end indices for this block.
+            start_idx = i * block_size
+            end_idx = (i + 1) * (block_size if i != tp_size - 1 else seq_len)
+            
+            # Extract the corresponding block for input IDs and positions.
+            input_block = context_input_ids[start_idx:end_idx]
+            position_block = context_positions[start_idx:end_idx]
+            
+            # Add the blocks to the respective lists.
+            context_blocks_input_ids.append(input_block)
+            context_blocks_positions.append(position_block)
+
+        return context_blocks_input_ids, context_blocks_positions
+
 
     def forward_extend(self, forward_batch: ForwardBatch):
-        # In case of extend, we need to split the request input_ids into context and query
-        # followed by partioning the context into blocks
-
-        enable_star_attention = self.server_args.enable_star_attention
-        if enable_star_attention:
-            query_start_indices = self.find_boundary_between_context_query_for_apollo(forward_batch.input_ids)
-            
-            input_ids_context = []
-            input_ids_query = []
-            positions_context = []
-            positions_query = []
-
-            for sequence_input_ids, sequence_positions, split_index in zip(forward_batch.input_ids, forward_batch.positions, query_start_indices):
-                if split_index is not None and split_index < len(sequence_input_ids):
-                    sequence_input_ids_context = sequence_input_ids[:split_index]
-                    sequence_positions_context = sequence_positions[:split_index]
-
-                    # Include the split token in the query
-                    sequence_input_ids_query = sequence_input_ids[split_index:]
-                    sequence_positions_query = sequence_positions[split_index:]
-                else:
-                    # We shouldn't get here...
-                    print("********* ModelRunner.forward_extend(), unable to split input inpo context/query")
-                    sequence_input_ids_context = sequence_input_ids
-                    sequence_input_ids_query = torch.tensor([], dtype=sequence_input_ids.dtype)
-
-                    sequence_positions_context = sequence_positions
-                    sequence_positions_query = torch.tensor([], dtype=sequence_positions.dtype)
-            
-                input_ids_context.append(sequence_input_ids_context)
-                input_ids_query.append(sequence_input_ids_query)
-                positions_context.append(sequence_positions_context)
-                positions_query.append(sequence_positions_query)
-
-                # TODO: Do we need to pad these sequences?
-
                 
         self.attn_backend.init_forward_metadata(forward_batch)
         if self.is_generation:
-            if forward_batch.input_embeds is None:
-                if enable_star_attention:
-                    context_blocks_input_ids = [] # TODO: Divide up into tp_size blocks
-                    context_blocks_positions = []
-                    
-                    anchor_block_input_ids = context_blocks_input_ids[0]
-                    anchor_block_positions = context_blocks_positions[0]    
+            if forward_batch.input_embeds is None: 
+                # In case of extend, we need to split the request input_ids into context and query
+                # followed by partioning the context into blocks
+                if self.server_args.enable_star_attention:
+                    print(f"******** ModelRunner, forward_batch input_ids: {input_ids}")
+                    query_start_indices = self.find_boundary_between_context_query_for_apollo(forward_batch.input_ids)
+                    print(f"******** ModelRunner, after find_boundary_between_context_query_for_apollo, query_start_indices: {query_start_indices}")
+
+                    input_ids_context, input_ids_query, positions_context, positions_query = split_input_into_context_and_query(
+                        input_ids=forward_batch.input_ids,
+                        positions=forward_batch.positions,
+                        query_start_indices=query_start_indices
+                    )
+                        
+                    input_ids_context_blocks, positions_context_blocks = divide_context_into_blocks(input_ids_context, positions_context)
+                    print(f"******** ModelRunner, after divide_context_into_blocks: {input_ids_context_blocks}, {positions_context_blocks}")
+
+                    input_ids_anchor_block = input_ids_context_blocks[0]
+                    positions_anchor_block = positions_context_blocks[0]
 
                     # Star Attention: Phase 1
                     if self.tp_rank == 0:
                         # First rank just gets the anchor block
-                        input_ids = anchor_block_input_ids
-                        positions = anchor_block_position
+                        input_ids = input_ids_anchor_block
+                        positions = positions_anchor_block
                     else:
-                        # Other ranks get anchor block + one of the context blocks
-                        input_ids = anchor_block_input_ids + context_blocks_input_ids[self.tp_rank]
-                        positions = anchor_block_positions + context_blocks_positions[self.tp_rank]
+                        # Other ranks get anchor block + their corresponding context blocks
+                        input_ids = input_ids_anchor_block + input_ids_context_blocks[self.tp_rank]
+                        positions = positions_anchor_block + positions_context_blocks[self.tp_rank]
 
                     forward_batch.star_attention_phase = StarAttentionPhase.CONTEXT_ENCODING
                     # TODO: Update rest of forward_batch properties
+                    print(f"******* ModelRunner forward_extend, First forward call star-attn with input ids: {input_ids}, positions: {positions}")
                     self.model.forward(
                         input_ids=input_ids,
                         positions=positions,
@@ -785,9 +847,10 @@ class ModelRunner:
                     # Star Attention: Phase 2
                     forward_batch.star_attention_phase = StarAttentionPhase.QUERY_DECODING
                     # TODO: Update rest of forward_batch properties
+                    print(f"******* ModelRunner forward_extend, Second forward call star-attn with input ids: {input_ids_query}, positions: {positions_query}")
                     return self.model.forward(
                         input_ids=input_ids_query,
-                        positions=postions_query,
+                        positions=positions_query,
                         forward_batch=forward_batch,
                     )
 
