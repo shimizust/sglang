@@ -135,8 +135,6 @@ class ForwardBatch:
 
     # The forward mode
     forward_mode: ForwardMode
-    # The star attention phase
-    star_attention_phase: StarAttentionPhase
     # The batch size
     batch_size: int
     # The input ids
@@ -189,6 +187,9 @@ class ForwardBatch:
     req_to_token_pool: ReqToTokenPool = None
     token_to_kv_pool: BaseTokenToKVPool = None
     attn_backend: AttentionBackend = None
+    
+    # The star attention phase
+    star_attention_phase: Optional[StarAttentionPhase] = None
 
     # For DP attention
     global_num_tokens: Optional[List[int]] = None

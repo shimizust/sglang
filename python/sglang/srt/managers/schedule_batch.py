@@ -1024,7 +1024,7 @@ class ScheduleBatch:
         bs = len(self.reqs)
         self.out_cache_loc = self.alloc_token_slots(bs)
         # The length of out_cache_loc is just the sum of num_requests, since we're just decoding a single new token per request.
-        print(f"****** Schedule_batch.prepare_for_decode() out_cache_loc: {out_cache_loc}")
+        print(f"****** Schedule_batch.prepare_for_decode() out_cache_loc: {self.out_cache_loc}")
 
         if self.model_config.is_encoder_decoder:
             locs = self.encoder_lens + self.seq_lens
