@@ -105,6 +105,9 @@ CONTEXT_LENGTH_KEYS = [
 
 def get_context_length(config):
     """Get the context length of a model from a huggingface model configs."""
+    # TODO_SS: For testing
+    return 13
+
     text_config = config
     rope_scaling = getattr(text_config, "rope_scaling", None)
     if rope_scaling:

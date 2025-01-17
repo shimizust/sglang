@@ -109,6 +109,7 @@ class RadixCache(BasePrefixCache):
 
     def cache_finished_req(self, req: Req, token_ids: Optional[List[int]] = None):
         """Cache request when it finishes."""
+        print("RadixCache.cache_finished_req")
         if self.disable:
             if token_ids is None:
                 token_ids_len = len(req.origin_input_ids) + len(req.output_ids) - 1
@@ -138,6 +139,7 @@ class RadixCache(BasePrefixCache):
 
     def cache_unfinished_req(self, req: Req, token_ids: Optional[List[int]] = None):
         """Cache request when it is unfinished."""
+        print("RadixCache.cache_unfinished_req")
         if self.disable:
             return
 
@@ -286,6 +288,7 @@ class RadixCache(BasePrefixCache):
             new_node = TreeNode()
             new_node.parent = node
             new_node.key = key
+            print(f"#### RadixCache, current key: {key}, value: {value}")
             new_node.value = value
             node.children[key[0]] = new_node
             self.evictable_size_ += len(value)

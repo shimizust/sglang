@@ -526,8 +526,8 @@ class ModelRunner:
             raise ValueError(
                 f"Unsupported kv_cache_dtype: {self.server_args.kv_cache_dtype}."
             )
-
-        self.max_total_num_tokens = self.profile_max_num_token(total_gpu_memory)
+        # TODO_SS: For testing
+        self.max_total_num_tokens = 30 # self.profile_max_num_token(total_gpu_memory)
 
         if max_num_reqs is None:
             max_num_reqs = min(
@@ -539,6 +539,8 @@ class ModelRunner:
                 ),
                 4096,
             )
+        # TODO_SS: For testing
+        # max_num_reqs = 2
 
         if not self.spec_algorithm.is_none():
             if self.is_draft_worker:
@@ -712,8 +714,8 @@ class ModelRunner:
                 indices.append(second_to_last_index)
             else:
                 # If there are fewer than two occurrences, append None or a default value
-                print("******** Context/Query boundary couldn't be identified, using len(sequence) - 3 instead")
-                indices.append(len(sequence) - 3)
+                print("******** Context/Query boundary couldn't be identified, using len(sequence) - 2 instead")
+                indices.append(len(sequence) - 2)
 
         return indices
 
@@ -789,7 +791,7 @@ class ModelRunner:
 
         # Compute block size
         block_size = seq_len // tp_size
-
+        print(f"******** ModelRunner seq_len: {seq_len}, block_size: {block_size}")
         # Divide the input into roughly equal blocks.
         context_blocks_input_ids = []
         context_blocks_positions = []
@@ -800,8 +802,8 @@ class ModelRunner:
             end_idx = (i + 1) * (block_size if i != tp_size - 1 else seq_len)
             
             # Extract the corresponding block for input IDs and positions.
-            input_block = context_input_ids[start_idx:end_idx]
-            position_block = context_positions[start_idx:end_idx]
+            input_block = context_input_ids[:, start_idx:end_idx]
+            position_block = context_positions[:, start_idx:end_idx]
             
             # Add the blocks to the respective lists.
             context_blocks_input_ids.append(input_block)
@@ -843,7 +845,9 @@ class ModelRunner:
                         positions = positions_anchor_block
 
                         # Need to update the out_cache_loc containing the kv cache indices to store kv for each token
-                        # forward_batch.out_cache_loc = original_out_cache_loc[:4]
+                        num_seqs, seq_len = input_ids.size()
+                        num_cache_locs = num_seqs * seq_len
+                        # forward_batch.out_cache_loc = original_out_cache_loc[:num_cache_locs]
                     else:
                         # Other ranks get anchor block + their corresponding context blocks
                         print(f"********* ModelRunner on rank {self.tp_rank}, input_ids_anchor_block: {input_ids_anchor_block}, input_ids_context_blocks[self.tp_rank]: {input_ids_context_blocks[self.tp_rank]}")
@@ -851,19 +855,29 @@ class ModelRunner:
                         positions = torch.cat((positions_anchor_block, positions_context_blocks[self.tp_rank]), dim=1)
                         print(f"******** ModelRunner on rank {self.tp_rank}, star-attn phase 1, input_ids: {input_ids}, positions: {positions}")
 
+                        # TODO: We're just getting the length right, but this is not correct set of token cache indices to use
+                        num_seqs, seq_len = input_ids.size()
+                        num_cache_locs = num_seqs * seq_len
+                        forward_batch.out_cache_loc = original_out_cache_loc[:num_cache_locs]
 
                     print(f"******** ModelRunner, forward_batch.out_cache_loc: {forward_batch.out_cache_loc}")
                     forward_batch.star_attention_phase = StarAttentionPhase.CONTEXT_ENCODING
                     # TODO: Update rest of forward_batch properties
                     print(f"******* ModelRunner forward_extend, First forward call star-attn with input ids: {input_ids}, positions: {positions}")
-                    self.model.forward(
+                    output_logits = self.model.forward(
                         input_ids=torch.squeeze(input_ids),
                         positions=torch.squeeze(positions),
                         forward_batch=forward_batch
                     )
+                    print(f"******* ModelRunner forward_extend, first forward call output: {output_logits}")
+                    return output_logits
 
                     # Star Attention: Phase 2
                     forward_batch.star_attention_phase = StarAttentionPhase.QUERY_DECODING
+                    num_seqs, seq_len = input_ids_query.size()
+                    num_cache_locs = num_seqs * seq_len
+                    forward_batch.out_cache_loc = original_out_cache_loc[-num_cache_locs:]
+
                     # TODO: Update rest of forward_batch properties
                     print(f"******* ModelRunner forward_extend, Second forward call star-attn with input ids: {input_ids_query}, positions: {positions_query}")
                     return self.model.forward(
@@ -873,10 +887,20 @@ class ModelRunner:
                     )
 
                 else:
-                    print(f"******* ModelRunner normal model.forward(), input_ids: {forward_batch.input_ids}, positions: {forward_batch.positions}")
-                    return self.model.forward(
+                    req_to_token_pool = forward_batch.req_to_token_pool.req_to_token
+
+                    print("*************")
+                    print(f"******* ModelRunner normal model.forward(), input_ids: {forward_batch.input_ids}, positions: {forward_batch.positions}, req_pool_indices: {forward_batch.req_pool_indices}, out_cache_loc: {forward_batch.out_cache_loc}, seq_lens_sum: {forward_batch.seq_lens_sum}, req_to_token_pool.req_to_token: {req_to_token_pool.size()}, {req_to_token_pool}, token_to_kv_pool.k_buffer: {len(forward_batch.token_to_kv_pool.k_buffer)} layers with for layer 0, head 0: {forward_batch.token_to_kv_pool.k_buffer[0][:,0,:]}, forward_batch: {forward_batch.token_to_kv_pool}")
+                    print("************")
+                    logits_processor_output = self.model.forward(
                         forward_batch.input_ids, forward_batch.positions, forward_batch
                     )
+
+                    torch.set_printoptions(threshold=torch.inf)
+
+                    print(f"******** After ModelRunner.forward(), input_ids: {forward_batch.input_ids}, positions: {forward_batch.positions}, req_pool_indices: {forward_batch.req_pool_indices}, out_cache_loc: {forward_batch.out_cache_loc}, seq_lens_sum: {forward_batch.seq_lens_sum}, req_to_token_pool.req_to_token: {req_to_token_pool.size()}, {req_to_token_pool}, token_to_kv_pool.k_buffer: {len(forward_batch.token_to_kv_pool.k_buffer)} layers with for layer 0, head 0: {forward_batch.token_to_kv_pool.k_buffer[0][:,0,:]}, forward_batch: {forward_batch.token_to_kv_pool}")
+
+                    return logits_processor_output
             else:
                 return self.model.forward(
                     forward_batch.input_ids,
