@@ -1162,7 +1162,14 @@ class Scheduler(
             # Merge the new batch into the running batch
             if not self.last_batch.is_empty():
                 if self.running_batch.is_empty():
-                    self.running_batch = self.last_batch
+                    # New logic
+                    if any(req.sampling_params.max_new_tokens > 1 for req in self.last_batch.reqs):
+                        # In the case of prefill-only requests, we don't need to schedule
+                        # the next batch to run for the decode step, eliminating an unnecessary
+                        # forward pass. If any request has max_new_tokens > 1, we schedule the
+                        # next batch to run for the decode step. Otherwise, no extra decode step will be
+                        # run.
+                        self.running_batch = self.last_batch
                 else:
                     # Merge running_batch with prefill batch
                     self.running_batch.merge_batch(self.last_batch)
