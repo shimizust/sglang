@@ -738,3 +738,53 @@ class RpcReqInput:
 class RpcReqOutput:
     success: bool
     message: str
+
+
+@dataclass
+class GenerateResponse:
+    """Response structure for the generate endpoint."""
+    # The generated text for each prompt in the batch
+    text: Optional[Union[List[str], str]] = None
+    # The token IDs for the generated text
+    output_ids: Optional[Union[List[List[int]], List[int]]] = None
+    # The finish reason for each generation
+    finish_reason: Optional[Union[List[str], str]] = None
+    # Token usage statistics
+    usage: Optional[Dict[str, int]] = None
+    # Log probabilities if requested
+    logprobs: Optional[Dict[str, Any]] = None
+    # Hidden states if requested
+    hidden_states: Optional[List[List[float]]] = None
+    # The request ID
+    rid: Optional[Union[List[str], str]] = None
+
+    def normalize_batch_and_arguments(self):
+        """Normalize the response to handle both single and batch cases."""
+        if self.text is not None:
+            if isinstance(self.text, str):
+                self.is_single = True
+                self.batch_size = 1
+            else:
+                self.is_single = False
+                self.batch_size = len(self.text)
+        elif self.output_ids is not None:
+            if isinstance(self.output_ids[0], int):
+                self.is_single = True
+                self.batch_size = 1
+            else:
+                self.is_single = False
+                self.batch_size = len(self.output_ids)
+        else:
+            raise ValueError("Either text or output_ids must be provided")
+
+        # Normalize other fields to match batch size
+        if self.is_single:
+            if self.finish_reason is not None and isinstance(self.finish_reason, list):
+                self.finish_reason = self.finish_reason[0]
+            if self.rid is not None and isinstance(self.rid, list):
+                self.rid = self.rid[0]
+        else:
+            if self.finish_reason is not None and isinstance(self.finish_reason, str):
+                self.finish_reason = [self.finish_reason] * self.batch_size
+            if self.rid is not None and isinstance(self.rid, str):
+                self.rid = [self.rid] * self.batch_size

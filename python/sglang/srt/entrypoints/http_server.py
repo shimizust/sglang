@@ -49,6 +49,7 @@ from sglang.srt.managers.io_struct import (
     ConfigureLoggingReq,
     EmbeddingReqInput,
     GenerateReqInput,
+    GenerateResponse,
     GetWeightsByNameReqInput,
     InitWeightsUpdateGroupReqInput,
     OpenSessionReqInput,
@@ -223,11 +224,21 @@ async def set_internal_state(obj: SetInternalStateReq, request: Request):
 
 
 # fastapi implicitly converts json in the request to obj (dataclass)
-@app.api_route("/generate", methods=["POST", "PUT"])
-async def generate_request(obj: GenerateReqInput, request: Request):
-    """Handle a generate request."""
+@app.api_route("/generate", methods=["POST", "PUT"], response_model=GenerateResponse)
+async def generate_request(obj: GenerateReqInput, request: Request) -> GenerateResponse:
+    """Handle a generate request.
+    
+    Args:
+        obj: The generate request input containing prompts and parameters
+        request: The raw HTTP request object
+        
+    Returns:
+        GenerateResponse containing the generated text and metadata
+        
+    Raises:
+        ValueError: If the request is invalid or processing fails
+    """
     if obj.stream:
-
         async def stream_results() -> AsyncIterator[bytes]:
             try:
                 async for out in _global_state.tokenizer_manager.generate_request(
@@ -254,7 +265,7 @@ async def generate_request(obj: GenerateReqInput, request: Request):
             ret = await _global_state.tokenizer_manager.generate_request(
                 obj, request
             ).__anext__()
-            return ret
+            return GenerateResponse(**ret)
         except ValueError as e:
             logger.error(f"Error: {e}")
             return _create_error_response(e)

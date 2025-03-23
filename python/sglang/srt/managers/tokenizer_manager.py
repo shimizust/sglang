@@ -39,6 +39,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    AsyncIterator,
 )
 
 import fastapi
@@ -67,6 +68,7 @@ from sglang.srt.managers.io_struct import (
     EmbeddingReqInput,
     FlushCacheReq,
     GenerateReqInput,
+    GenerateResponse,
     GetInternalStateReq,
     GetInternalStateReqOutput,
     GetWeightsByNameReqInput,
@@ -329,7 +331,16 @@ class TokenizerManager:
         self,
         obj: Union[GenerateReqInput, EmbeddingReqInput],
         request: Optional[fastapi.Request] = None,
-    ):
+    ) -> AsyncIterator[GenerateResponse]:
+        """Handle a generate request.
+        
+        Args:
+            obj: The generate request input containing prompts and parameters
+            request: The raw HTTP request object
+            
+        Returns:
+            AsyncIterator[GenerateResponse]: An async iterator yielding GenerateResponse objects
+        """
         created_time = time.time()
 
         self.auto_create_handle_loop()
@@ -932,10 +943,10 @@ class TokenizerManager:
                 meta_info["hidden_states"] = recv_obj.output_hidden_states[i]
 
             if isinstance(recv_obj, BatchStrOut):
-                out_dict = {
-                    "text": recv_obj.output_strs[i],
-                    "meta_info": meta_info,
-                }
+                out_dict = GenerateResponse(
+                    text=recv_obj.output_strs[i],
+                    meta_info=meta_info
+                )
             elif isinstance(recv_obj, BatchTokenIDOut):
                 if self.server_args.stream_output and state.obj.stream:
                     output_token_ids = recv_obj.output_ids[i][
@@ -945,10 +956,10 @@ class TokenizerManager:
                 else:
                     output_token_ids = recv_obj.output_ids[i]
 
-                out_dict = {
-                    "output_ids": output_token_ids,
-                    "meta_info": meta_info,
-                }
+                out_dict = GenerateResponse(
+                    output_ids=output_token_ids,
+                    meta_info=meta_info
+                )
             elif isinstance(recv_obj, BatchMultimodalOut):
                 raise NotImplementedError()
             else:
